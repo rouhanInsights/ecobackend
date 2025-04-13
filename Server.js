@@ -5,7 +5,9 @@ const pool = require('./Db');
 
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors({ origin: 'http://localhost:3000',
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"], }));
 app.use(express.json());
 const userRoutes = require('./routes/userRoutes');
 
@@ -16,7 +18,10 @@ const otpRoutes = require('./routes/otpRoutes');
 const adminRoutes=require("./routes/adminproductRoutes")
 const slotRoutes = require('./routes/slotRoutes');
 app.use('/api/slots', slotRoutes);
-
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payments", paymentRoutes);
+const addressRoutes = require('./routes/addressRoutes');
+app.use('/api/users/addresses', addressRoutes);
 
 
 

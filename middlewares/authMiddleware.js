@@ -1,24 +1,25 @@
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
+
+
 const verifyToken = (req, res, next) => {
-  
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized: No token provided" });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.split(" ")[1]; // ✅ DECLARE token here
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { userId, isAdmin }
-    console.log("Decoded token:", decoded);
+    req.user = { userId: decoded.userId };
     next();
   } catch (err) {
-    res.status(401).json({ error: 'Invalid token' });
+    console.error("JWT verify failed:", err);
+    res.status(401).json({ error: "Invalid token" });
   }
-  
 };
 
 // Admin check

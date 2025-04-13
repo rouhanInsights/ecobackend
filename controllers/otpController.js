@@ -1,9 +1,6 @@
 const pool = require('../Db');
 const jwt = require('jsonwebtoken');
 
-
-
-
 // Step 1: Send OTP
 const sendOtp = async (req, res) => {
   const { phone, email } = req.body;
@@ -15,12 +12,12 @@ const sendOtp = async (req, res) => {
     }
 
     await pool.query(
-      'INSERT INTO otps (phone, email, otp_code) VALUES ($1, $2, $3)',
+      'INSERT INTO otps (phone, email, otp_code, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
       [phone || null, email || null, otp]
     );
 
-    // Mock send (use SMS/email API later)
-    console.log(`OTP sent to ${phone || email}: ${otp}`);
+    // Log for dev use (replace with SMS/Email later)
+    console.log(`✅ OTP sent to ${phone || email}: ${otp}`);
 
     res.json({ message: 'OTP sent successfully' });
   } catch (err) {
@@ -30,29 +27,43 @@ const sendOtp = async (req, res) => {
 };
 
 // Step 2: Verify OTP
-
 const verifyOtp = async (req, res) => {
   const { phone, email, otp_code } = req.body;
 
   try {
-    const result = await pool.query(
-      `SELECT * FROM otps
-         WHERE otp_code = $1 AND (phone = $2 OR email = $3)
+    console.log("Verifying OTP for:", { phone, email, otp_code });
+
+    let result;
+
+    if (phone) {
+      result = await pool.query(
+        `SELECT * FROM otps
+         WHERE otp_code = $1 AND phone = $2
+         AND created_at > NOW() - INTERVAL '5 minutes'
          ORDER BY created_at DESC LIMIT 1`,
-      [otp_code, phone || null, email || null]
-    );
+        [otp_code, phone]
+      );
+    } else if (email) {
+      result = await pool.query(
+        `SELECT * FROM otps
+         WHERE otp_code = $1 AND email = $2
+         AND created_at > NOW() - INTERVAL '5 minutes'
+         ORDER BY created_at DESC LIMIT 1`,
+        [otp_code, email]
+      );
+    } else {
+      return res.status(400).json({ error: 'Phone or Email is required' });
+    }
 
     if (result.rows.length === 0) {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
 
-    await pool.query('DELETE FROM otps WHERE phone = $1 OR email = $2', [phone || null, email || null]);
-    // Delete all OTPs for this user
+    // Clean up OTPs
     await pool.query('DELETE FROM otps WHERE phone = $1 OR email = $2', [phone || null, email || null]);
 
-    // ✅ FETCH or CREATE USER
+    // Fetch or create user
     let user;
-
     if (phone) {
       const userQuery = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
       user = userQuery.rows[0];
@@ -64,32 +75,55 @@ const verifyOtp = async (req, res) => {
     if (!user) {
       const insertQuery = phone
         ? await pool.query(
-          'INSERT INTO users (phone, name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING *',
-          [phone, 'New User', email || `${phone}@otp.com`, 'OTP_AUTH']
-        )
+            'INSERT INTO users (phone, name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING *',
+            [phone, 'New User', email || `${phone}@otp.com`, 'OTP_AUTH']
+          )
         : await pool.query(
-          'INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING *',
-          [email, 'New User', 'OTP_AUTH']
-        );
+            'INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING *',
+            [email, 'New User', 'OTP_AUTH']
+          );
       user = insertQuery.rows[0];
     }
 
     const token = jwt.sign(
-      {
-        userId: user.user_id,
-        isAdmin: user.is_admin || false
-      },
+      { userId: user.user_id }, // ✅ correct
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
-
+    
     res.json({ message: 'Login successful', token, user });
   } catch (err) {
     console.error('Verify OTP Error:', err);
     res.status(500).json({ error: 'Failed to verify OTP' });
   }
 };
+const details=  async (req, res) => {
+  const userId = req.user.userId; // 👈 coming from token
+  
+  try {
+    const result = await pool.query(
+      "SELECT * FROM users WHERE user_id = $1",
+      [userId]
+    );
+  
+    const user = result.rows[0];
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    console.log("Decoded JWT user:", req.user);
+    res.json({
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      address:user.address,
+      city: user.city,
+      pincode: user.pincode,
+    });
+  } catch (err) {
+    console.error("User details error:", err);
+    res.status(500).json({ error: "Failed to fetch user" });
+  }
+};
 
 
-module.exports = { sendOtp, verifyOtp };
-
+module.exports = { sendOtp, verifyOtp,details };

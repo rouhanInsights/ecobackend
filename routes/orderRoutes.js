@@ -5,7 +5,7 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 
 router.get('/my-orders', verifyToken, getUserOrders);
 
-router.post('/', placeOrder);           // Place order
-router.get('/:userId', getUserOrders);  // Get all orders by user
+router.post('/',verifyToken, placeOrder);           // Place order
+router.get('/:userId', verifyToken,getUserOrders);  // Get all orders by user
 
 module.exports = router;
